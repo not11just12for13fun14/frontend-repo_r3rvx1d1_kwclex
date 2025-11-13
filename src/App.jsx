@@ -1,5 +1,8 @@
-import React, { useMemo, useState } from 'react'
-import Spline from '@splinetool/react-spline'
+import React, { useEffect, useMemo, useState } from 'react'
+import Hero from './components/Hero'
+import Projects from './components/Projects'
+import Socials from './components/Socials'
+import { Github, Linkedin, Globe, Twitter, Link as LinkIcon } from 'lucide-react'
 
 function Chip({ children }) {
   return <span className="inline-block px-3 py-1 rounded-full text-sm bg-sky-50 text-sky-700 border border-sky-100 mr-2 mb-2">{children}</span>
@@ -24,9 +27,14 @@ export default function App() {
   const [certs, setCerts] = useState('')
   const [education, setEducation] = useState([{ institution: '', degree: '', start_date: '', end_date: '', details: '' }])
   const [experience, setExperience] = useState([{ company: '', role: '', start_date: '', end_date: '', responsibilities: '' }])
+  const [projects, setProjects] = useState([{ title: '', link: '', description: '', technologies: '' }])
+  const [socials, setSocials] = useState({ website: '', github: '', linkedin: '', twitter: '', dribbble: '' })
+
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [savedId, setSavedId] = useState('')
+  const [recent, setRecent] = useState([])
+  const [loadingRecent, setLoadingRecent] = useState(false)
 
   const portfolioPayload = useMemo(() => ({
     name,
@@ -40,7 +48,14 @@ export default function App() {
     certifications: certs.split(',').map(s => s.trim()).filter(Boolean),
     education,
     experience,
-  }), [name, title, email, phone, location, summary, photo, skills, certs, education, experience])
+    projects: projects.map(p => ({
+      title: p.title,
+      link: p.link || undefined,
+      description: p.description || undefined,
+      technologies: (p.technologies || '').split(',').map(t => t.trim()).filter(Boolean)
+    })),
+    socials: Object.fromEntries(Object.entries(socials).filter(([_, v]) => v && v.trim()))
+  }), [name, title, email, phone, location, summary, photo, skills, certs, education, experience, projects, socials])
 
   function onPhotoChange(e) {
     const file = e.target.files?.[0]
@@ -97,22 +112,37 @@ export default function App() {
     }
   }
 
+  async function loadRecent() {
+    try {
+      setLoadingRecent(true)
+      const res = await fetch(`${backendUrl}/api/portfolio?limit=6`)
+      const data = await res.json()
+      setRecent(data.items || [])
+    } catch (e) {
+      // ignore
+    } finally {
+      setLoadingRecent(false)
+    }
+  }
+
+  useEffect(() => {
+    loadRecent()
+  }, [])
+
+  const SocialIcon = ({ type }) => {
+    const m = {
+      website: Globe,
+      github: Github,
+      linkedin: Linkedin,
+      twitter: Twitter,
+    }
+    const Icon = m[type] || LinkIcon
+    return <Icon size={18} className="text-sky-700" />
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-sky-50 text-gray-900">
-      {/* Hero with Spline */}
-      <section className="relative w-full h-[60vh] md:h-[70vh] overflow-hidden">
-        <div className="absolute inset-0">
-          <Spline scene="https://prod.spline.design/qQUip0dJPqrrPryE/scene.splinecode" style={{ width: '100%', height: '100%' }} />
-        </div>
-        <div className="absolute inset-0 bg-gradient-to-b from-white/80 via-white/50 to-white pointer-events-none" />
-        <div className="relative max-w-6xl mx-auto px-6 h-full flex items-center">
-          <div className="backdrop-blur-md bg-white/60 rounded-2xl p-6 md:p-8 shadow-xl">
-            <p className="text-sky-600 font-semibold mb-2">Portfolio & CV Generator</p>
-            <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">Showcase your story in a modern, iridescent style</h1>
-            <p className="mt-3 text-gray-600 max-w-2xl">Upload your photo, add education and experience, then download a ready-to-share portfolio or CV.</p>
-          </div>
-        </div>
-      </section>
+      <Hero />
 
       {/* Builder */}
       <section className="max-w-6xl mx-auto px-6 -mt-16 relative z-10">
@@ -194,6 +224,9 @@ export default function App() {
             ))}
             <button onClick={() => setExperience(prev => [...prev, { company: '', role: '', start_date: '', end_date: '', responsibilities: '' }])} className="text-sm px-3 py-1.5 rounded-md bg-sky-600 text-white hover:bg-sky-700">Add experience</button>
 
+            <Projects projects={projects} setProjects={setProjects} />
+            <Socials socials={socials} setSocials={setSocials} />
+
             <div className="mt-6 flex flex-wrap gap-3">
               <button onClick={savePortfolio} disabled={saving} className="px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-60">{saving ? 'Saving...' : 'Save to Cloud'}</button>
               <button onClick={downloadCV} disabled={downloading} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-60">{downloading ? 'Preparing...' : 'Download CV'}</button>
@@ -269,10 +302,77 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {projects.some(p => p.title || p.description) && (
+              <div>
+                <SectionTitle>Projects</SectionTitle>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {projects.map((p, i) => (
+                    <div key={i} className="border border-sky-100 rounded-xl p-4">
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium">{p.title || 'Project'}</div>
+                        {p.link && <a className="text-sky-700 text-sm underline inline-flex items-center gap-1" href={p.link} target="_blank" rel="noreferrer"><LinkIcon size={16}/>Visit</a>}
+                      </div>
+                      {p.description && <p className="text-sm text-gray-700 mt-1">{p.description}</p>}
+                      {(p.technologies || '').split(',').map(t => t.trim()).filter(Boolean).length > 0 && (
+                        <div className="mt-2">
+                          {(p.technologies || '').split(',').map(t => t.trim()).filter(Boolean).map((t, j) => (
+                            <Chip key={j}>{t}</Chip>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Object.values(socials).some(Boolean) && (
+              <div>
+                <SectionTitle>Socials</SectionTitle>
+                <div className="flex flex-wrap gap-3">
+                  {Object.entries(socials).filter(([_, v]) => v).map(([k, v]) => (
+                    <a key={k} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-sky-100 hover:bg-sky-50" href={v} target="_blank" rel="noreferrer">
+                      <SocialIcon type={k} />
+                      <span className="text-sm capitalize">{k}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+        </div>
+
+        {/* Recent */}
+        <div className="mt-10">
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Recently saved portfolios</h3>
+          {loadingRecent ? (
+            <div className="text-sm text-gray-500">Loading...</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {recent.map((r, i) => (
+                <div key={i} className="p-4 rounded-xl border border-sky-100 bg-white/70">
+                  <div className="font-medium">{r.name || 'Unnamed'}</div>
+                  <div className="text-sm text-sky-700">{r.title || ''}</div>
+                  {Array.isArray(r.skills) && r.skills.length > 0 && (
+                    <div className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-gray-600">{r.skills.slice(0,5).join(', ')}{r.skills.length>5?'…':''}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <p className="text-center text-xs text-gray-500 mt-6">Backend: {backendUrl}</p>
       </section>
+
+      <footer className="mt-16 border-t border-sky-100 py-8 bg-white/60">
+        <div className="max-w-6xl mx-auto px-6 text-sm text-gray-600 flex flex-col md:flex-row items-center justify-between gap-3">
+          <div>Built with a holographic theme and 3D hero.</div>
+          <div>
+            <a href="#top" className="text-sky-700 hover:underline">Back to top</a>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
